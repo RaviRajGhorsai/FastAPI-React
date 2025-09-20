@@ -1,7 +1,8 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
+from config import Config
 
-DATABASE_URL = "mysql+pymysql://root:groot@localhost:3306/blog"
+DATABASE_URL = Config.database_url
 
 engine = create_engine(DATABASE_URL)
 

@@ -11,7 +11,7 @@ export default function OAuthCallback() {
     if (accessToken) {
       localStorage.setItem("access_token", accessToken);
       console.log("access: ", accessToken)
-      window.location.replace("/dashboard");  // go to protected page
+      window.location.replace("/dashboard"); 
     } else {
       navigate("/login");
     }

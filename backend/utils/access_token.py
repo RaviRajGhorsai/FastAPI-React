@@ -11,14 +11,14 @@ def create_access_token(user_data: dict, expiry: timedelta = None, refresh: bool
     
     payload['jti'] = str(uuid.uuid4())
     payload['refresh'] = refresh
-    token = jwt.encode(payload, key=Config.secret_key, algorithm=Config.algorithm)
+    token = jwt.encode(payload, key=Config.SECRET_KEY, algorithm=Config.algorithm)
     
     return token
 
 def decode_token(token: str):
     try:
         token_data = jwt.decode(token,
-                            key=Config.secret_key,
+                            key=Config.SECRET_KEY,
                             algorithm=Config.algorithm)
         return token_data
     except jwt.pyJWTError as e:

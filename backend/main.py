@@ -7,7 +7,6 @@ from database import SessionLocal, engine, Base
 import models, schemas
 from utils.password_hash import pwd_hash, verify_password
 from utils.access_token import create_access_token
-from utils.appwrite_client import account, client
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from authlib.integrations.starlette_client import OAuth, OAuthError
@@ -25,10 +24,11 @@ import httpx
 Base.metadata.create_all(bind=engine)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
-SECRET_KEY = "8786aee683e7a9ca3964b72121d1597d7adcfc29853bf0755189adc1b5f77da3"
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
-REFRESH_TOKEN_EXPIRE_DAYS = 3
+SECRET_KEY = Config.SECRET_KEY
+ALGORITHM = Config.algorithm
+
+ACCESS_TOKEN_EXPIRE_MINUTES = Config.access_token_expire_minutes
+REFRESH_TOKEN_EXPIRE_DAYS = Config.REFRESH_TOKEN_EXPIRE_DAYS
 
 app = FastAPI()
 
@@ -94,9 +94,9 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
 async def signup_users(user: schemas.UserCreate, db: Session = Depends(get_db)):
     existing = db.query(models.User).filter(models.User.email == user.email).first()
     if existing:
-        raise ValueError("Email already registered")
+        raise HTTPException(status_code=status.HTTP_208_ALREADY_REPORTED, detail="Email already registered")
     if user.password != user.confirmPassword:
-        raise ValueError("Passwords do not match")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Passwords do not match")
     hashed_pwd = pwd_hash(user.password)
     new_user = models.User(firstname=user.firstname, 
                            lastname=user.lastname, 
@@ -111,9 +111,9 @@ async def signup_users(user: schemas.UserCreate, db: Session = Depends(get_db)):
 async def login_users(user: schemas.UserLogin, db: Session = Depends(get_db)):
     db_user = db.query(models.User).filter(models.User.email == user.email).first()
     if not db_user:
-        raise ValueError("Email not registered")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Email not registered")
     if not verify_password(user.password, db_user.password):
-        raise ValueError("Incorrect password")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect password")
     
     try:
         access_token = create_access_token(user_data={"email": user.email, 
@@ -138,7 +138,7 @@ async def login_users(user: schemas.UserLogin, db: Session = Depends(get_db)):
                 "email": db_user.email}
             })
     except Exception as e:
-        raise ValueError("Token generation failed") from e
+        raise HTTPException(status_code=status.WS_1011_INTERNAL_ERROR, detail="Token generation failed") from e
 
 @app.get("/auth/login")
 async def google_login(request: Request):
@@ -147,7 +147,7 @@ async def google_login(request: Request):
     return RedirectResponse(url=google_auth_url)
 
 @app.get("/auth/google/callback")
-async def auth_callback(code:str, request: Request, db: Session = Depends(get_db)):
+async def auth_callback(code:str, request: Request):
     token_request_uri = "https://oauth2.googleapis.com/token"
     data = {
         'code': code,
@@ -164,7 +164,7 @@ async def auth_callback(code:str, request: Request, db: Session = Depends(get_db
         
     id_token_value = token_response.get('id_token')
     if not id_token_value:
-        raise HTTPException(status_code=400, detail="Missing id in response")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing id in response")
 
     try:
         id_info = id_token.verify_oauth2_token(id_token_value, requests.Request(), Config.GOOGLE_CLIENT_ID)
@@ -210,16 +210,18 @@ async def auth_callback(code:str, request: Request, db: Session = Depends(get_db
         
         return response
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=f"Invalid id_token: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid id_token: {str(e)}")
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Internal Server Error")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal Server Error")
 
     
     
 @app.get("/dashboard/feed", response_model=list[schemas.BlogPostResponse])
 async def get_blog(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     blogs = db.query(models.BlogPost).all()
+    if not blogs:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="blogs not found")
     result = []
     
     user_bookmarks = db.query(models.Bookmark.post_id).filter(models.Bookmark.user_id == current_user.id).all()
@@ -272,7 +274,7 @@ async def get_user_blogs(db: Session = Depends(get_db), current_user: models.Use
 @app.post("/blog/create")
 async def create_blog(blog: schemas.BlogPostCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     
-    print(blog)
+    
     category = db.query(models.Category).filter(models.Category.title == blog.category).first()
     if not category:
         category = models.Category(title=blog.category)

@@ -16,9 +16,28 @@ export default function BlogDashboard() {
 
   const navigate = useNavigate();
   
+
+  function parseUserCookie(cookieValue) {
+  try {
+    // Try parsing directly (normal login case)
+    return JSON.parse(cookieValue);
+  } catch {
+    try {
+      // If that fails, try decoding base64 first (Google OAuth case)
+      return JSON.parse(atob(cookieValue));
+    } catch {
+      console.error("Invalid user cookie format");
+      return null;
+    }
+  }
+}
+
+  const userCookie = Cookies.get("user");
+  const parsedUser = userCookie ? parseUserCookie(userCookie) : null;
+
   const currentUser = {
-    firstname: JSON.parse(atob(Cookies.get('user'))).firstname,
-    email: JSON.parse(atob(Cookies.get('user'))).email,
+    firstname: parsedUser?.firstname || "Guest",
+    email: parsedUser?.email || "unknown",
     avatar: 'JD',
     access_token: localStorage.getItem('access_token')
   };

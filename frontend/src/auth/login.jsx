@@ -89,14 +89,6 @@ export default function Login() {
   const handleGoogleLogin = async () => {
     window.location.href = "http://localhost:8000/auth/login"
   
-    // const access_token = new URLSearchParams(window.location.search).get("access_token");
-    // console.log(access_token);
-
-    // account.createOAuth2Session(
-    //   'google',
-    //   'http://localhost:5173/dashboard',
-    //   'http://localhost:5173/login'
-    // )
   };
 
   return (
