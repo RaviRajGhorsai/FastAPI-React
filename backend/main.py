@@ -71,7 +71,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         user_data = payload.get("user")
         user_email = user_data.get("email")
         name = user_data.get("name")
-        print(user_data)
+       
         if user_email is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email")
         db_user = db.query(models.User).filter(models.User.email == user_email).first()
@@ -218,8 +218,16 @@ async def auth_callback(code:str, request: Request):
     
     
 @app.get("/dashboard/feed", response_model=list[schemas.BlogPostResponse])
-async def get_blog(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    blogs = db.query(models.BlogPost).all()
+async def get_blog(request: Request, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user), page:int =1, page_size:int = 4):
+    # offset and limit pagination
+    limit = page_size
+    offset = (page - 1)* limit
+    
+    base_page = request.url._url.split('?')[0]
+    next_page = f"{base_page}?page={page+1}&page_size={page_size}"
+    prev_page = f"{base_page}?page={page-1}&page_size={page_size}" if page > 1 else None
+    
+    blogs = db.query(models.BlogPost).order_by(models.BlogPost.id).offset(offset).limit(limit).all()
     if not blogs:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="blogs not found")
     result = []
@@ -244,7 +252,10 @@ async def get_blog(db: Session = Depends(get_db), current_user: models.User = De
                 likes=blog.likes_count,
                 is_liked = is_liked,
                 comments=blog.comments_count,
-                bookmarked=blog.id in bookmarked_post_ids
+                bookmarked=blog.id in bookmarked_post_ids,
+                base_page=base_page,
+                next_page=next_page,
+                prev_page=prev_page
             )
         )
     return result

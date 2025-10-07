@@ -16,7 +16,7 @@ export default function BlogDashboard() {
 
   const navigate = useNavigate();
   
-
+  
   function parseUserCookie(cookieValue) {
   try {
     // Try parsing directly (normal login case)
@@ -307,6 +307,44 @@ if (response.ok)
     setShowCreateModal(false);
   };
 
+
+  //API pagination (offset and limit pagination)
+  const handlePagination = (e) => {
+    e.preventDefault();
+    const page = e.target.name;
+
+    const fetchPage = async () =>{
+      try{
+        const response = await fetch(`http://localhost:8000/dashboard/feed?page=${page}&page_size=4`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${currentUser.access_token}`
+          },
+      });
+
+       if(response.ok){
+          const data = await response.json();
+          setAllPosts(data);
+          
+          const initialLiked = {};
+        data.forEach(post => {
+          initialLiked[post.id] = post.is_liked;
+        });
+        setLikedPosts(initialLiked);
+        }
+        if(response.status === 404){
+          console.error("No more pages");
+          return;
+        }
+      }
+      catch(error){
+        console.error('Error fetching posts:', error);
+      }
+    }
+fetchPage();
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Navigation */}
@@ -456,7 +494,35 @@ if (response.ok)
                 </article>
               ))}
             </div>
+            {/* Pagination */}
+            <div className="mt-8 flex items-center justify-center space-x-2">
+              <button className="px-4 py-2 rounded-lg font-medium text-sm bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 transition-colors">
+                Previous
+              </button>
+
+              <button onClick={handlePagination} name="1" className="px-4 py-2 rounded-lg font-medium text-sm bg-gray-900 text-white transition-colors">
+                1
+              </button>
+              <button onClick={handlePagination} name="2" className="px-4 py-2 rounded-lg font-medium text-sm bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 transition-colors">
+                2
+              </button>
+              <button onClick={handlePagination} name="3" className="px-4 py-2 rounded-lg font-medium text-sm bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 transition-colors">
+                3
+              </button>
+              <button onClick={handlePagination} name="4" className="px-4 py-2 rounded-lg font-medium text-sm bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 transition-colors">
+                4
+              </button>
+              <button onClick={handlePagination} name="5" className="px-4 py-2 rounded-lg font-medium text-sm bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 transition-colors">
+                5
+              </button>
+
+              <button className="px-4 py-2 rounded-lg font-medium text-sm bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 transition-colors">
+                Next
+              </button>
+            </div>
           </div>
+          
+
         )}
 
         {activeTab === 'my-posts' && (
