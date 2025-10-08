@@ -59,6 +59,10 @@ class BlogPostResponse(BaseModel):
     is_liked: bool = False
     comments: int
     bookmarked: bool = False
+
+class PaginatedBlogPosts(BaseModel):
+    pagination: dict
+    data: list[BlogPostResponse]
     
 class UserBlogPostResponse(BaseModel):
     id: int

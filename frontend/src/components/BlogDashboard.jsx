@@ -12,7 +12,11 @@ export default function BlogDashboard() {
   const [allPosts, setAllPosts] = useState([]);
   const [userPosts, setUserPosts] = useState([]);
   const [likedPosts, setLikedPosts] = useState([]);
-  
+  const[pagination, setPagination] = useState({
+    next_page: null,
+    prev_page: null,
+    base_page: null
+  });
 
   const navigate = useNavigate();
   
@@ -57,9 +61,11 @@ export default function BlogDashboard() {
         );
         if(response.ok){
           const data = await response.json();
-          setAllPosts(data);
+          console.log(data);
+          setAllPosts(data.data);
+          setPagination(data.pagination);
           const initialLiked = {};
-        data.forEach(post => {
+        data.data.forEach(post => {
           initialLiked[post.id] = post.is_liked;
         });
         setLikedPosts(initialLiked);
@@ -309,11 +315,73 @@ if (response.ok)
 
 
   //API pagination (offset and limit pagination)
-  const handlePagination = (e) => {
+  const handlePagination = async (e) => {
     e.preventDefault();
     const page = e.target.name;
 
-    const fetchPage = async () =>{
+    if (page ==='next' && pagination.next_page){
+      try{
+        const next_url = new URL(pagination.next_page);
+
+        const response = await fetch(next_url, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${currentUser.access_token}`
+          },
+      });
+      if(response.ok){
+          const data = await response.json();
+          setAllPosts(data.data);
+          setPagination(data.pagination);
+
+          const initialLiked = {};
+        data.forEach(post => {
+          initialLiked[post.id] = post.is_liked;
+        });
+        setLikedPosts(initialLiked);
+
+      }
+      }catch(error){
+        console.error("No more pages");
+        return;
+      }
+    }
+
+    else if(page ==='previous' && pagination.prev_page){
+      try{
+
+        const prev_url = new URL(pagination.prev_page);
+        const response = await fetch(prev_url, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${currentUser.access_token}`
+          },
+      });
+
+      if(response.ok){
+          const data = await response.json();
+          setAllPosts(data.data);
+          setPagination(data.pagination);
+
+          const initialLiked = {};
+        data.forEach(post => {
+          initialLiked[post.id] = post.is_liked;
+        });
+        setLikedPosts(initialLiked);
+
+      }
+
+      }catch(error){
+        console.error("No more pages");
+        return;
+      }
+    }
+    else{
+
+      const page = e.target.name;
+
       try{
         const response = await fetch(`http://localhost:8000/dashboard/feed?page=${page}&page_size=4`, {
           method: 'GET',
@@ -325,7 +393,7 @@ if (response.ok)
 
        if(response.ok){
           const data = await response.json();
-          setAllPosts(data);
+          setAllPosts(data.data);
           
           const initialLiked = {};
         data.forEach(post => {
@@ -342,7 +410,9 @@ if (response.ok)
         console.error('Error fetching posts:', error);
       }
     }
-fetchPage();
+
+  
+
   };
 
   return (
@@ -496,7 +566,7 @@ fetchPage();
             </div>
             {/* Pagination */}
             <div className="mt-8 flex items-center justify-center space-x-2">
-              <button className="px-4 py-2 rounded-lg font-medium text-sm bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 transition-colors">
+              <button onClick={handlePagination} name="previous" className="px-4 py-2 rounded-lg font-medium text-sm bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 transition-colors">
                 Previous
               </button>
 
@@ -516,7 +586,7 @@ fetchPage();
                 5
               </button>
 
-              <button className="px-4 py-2 rounded-lg font-medium text-sm bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 transition-colors">
+              <button onClick={handlePagination} name="next" className="px-4 py-2 rounded-lg font-medium text-sm bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 transition-colors">
                 Next
               </button>
             </div>

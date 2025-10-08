@@ -217,7 +217,7 @@ async def auth_callback(code:str, request: Request):
 
     
     
-@app.get("/dashboard/feed", response_model=list[schemas.BlogPostResponse])
+@app.get("/dashboard/feed", response_model=schemas.PaginatedBlogPosts)
 async def get_blog(request: Request, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user), page:int =1, page_size:int = 4):
     # offset and limit pagination
     limit = page_size
@@ -258,7 +258,15 @@ async def get_blog(request: Request, db: Session = Depends(get_db), current_user
                 prev_page=prev_page
             )
         )
-    return result
+    
+    return {
+            "pagination":{
+                "next_page": next_page,
+                "prev_page": prev_page,
+                "base_page": base_page
+            },
+            "data": result
+            }
 
 @app.get("/dashboard/userposts", response_model=list[schemas.UserBlogPostResponse])
 async def get_user_blogs(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
