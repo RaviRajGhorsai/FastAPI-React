@@ -1,5 +1,6 @@
 
-from fastapi import FastAPI, Request, Depends
+from typing import Optional
+from fastapi import FastAPI, Query, Request, Depends
 from fastapi import HTTPException, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import  Session
@@ -216,18 +217,85 @@ async def auth_callback(code:str, request: Request):
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal Server Error")
 
     
+# offset and limit pagination
+# @app.get("/dashboard/feed", response_model=schemas.PaginatedBlogPosts)
+# async def get_blog(request: Request, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user), page:int =1, page_size:int = 4):
+#     # offset and limit pagination
+#     limit = page_size
+#     offset = (page - 1)* limit
     
+#     base_page = request.url._url.split('?')[0]
+#     next_page = f"{base_page}?page={page+1}&page_size={page_size}"
+#     prev_page = f"{base_page}?page={page-1}&page_size={page_size}" if page > 1 else None
+    
+#     blogs = db.query(models.BlogPost).order_by(models.BlogPost.id).offset(offset).limit(limit).all()
+#     if not blogs:
+#         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="blogs not found")
+#     result = []
+    
+#     user_bookmarks = db.query(models.Bookmark.post_id).filter(models.Bookmark.user_id == current_user.id).all()
+#     bookmarked_post_ids = {bookmark.post_id for bookmark in user_bookmarks}
+    
+#     for blog in blogs:
+        
+#         is_liked = db.query(models.PostLike).filter(models.PostLike.post_id == blog.id, models.PostLike.user_id == current_user.id).first() is not None
+        
+#         result.append(
+#             schemas.BlogPostResponse(
+#                 id=blog.id,
+#                 title=blog.title,
+#                 content=blog.content,
+#                 excerpt=blog.excerpt,
+#                 category=blog.category.title if blog.category else "Uncategorized",
+#                 author=blog.author.firstname if blog.author else "Unknown",
+#                 authorAvatar=blog.author.avatar_url if blog.author else "",
+#                 createdAt=blog.created_at.isoformat() if blog.created_at else "",
+#                 likes=blog.likes_count,
+#                 is_liked = is_liked,
+#                 comments=blog.comments_count,
+#                 bookmarked=blog.id in bookmarked_post_ids,
+#                 
+#             )
+#         )
+    
+#     return {
+#             "pagination":{
+#                 "next_page": next_page,
+#                 "prev_page": prev_page,
+#                 "base_page": base_page
+#             },
+#             "data": result
+#             }
+
+def encode_cursor(value):
+    raw = json.dumps({"id": value})
+    return base64.urlsafe_b64encode(raw.encode()).decode()
+
+def decode_cursor(cursor):
+    raw = base64.urlsafe_b64decode(cursor.encode()).decode()
+    payload = json.loads(raw)
+    
+    return payload.get("id")
+
+
+# cursor pagination
 @app.get("/dashboard/feed", response_model=schemas.PaginatedBlogPosts)
-async def get_blog(request: Request, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user), page:int =1, page_size:int = 4):
-    # offset and limit pagination
-    limit = page_size
-    offset = (page - 1)* limit
+async def get_blog(request: Request, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user), cursor:Optional[str] = None, limit:int = Query(4, ge=1)):
+    # cursor pagination
+    cursor_id = 0
+    if cursor:
+        cursor_id = decode_cursor(cursor)
+    
+    blogs = db.query(models.BlogPost).order_by(models.BlogPost.id).where(models.BlogPost.id > cursor_id ).limit(limit+1).all()
     
     base_page = request.url._url.split('?')[0]
-    next_page = f"{base_page}?page={page+1}&page_size={page_size}"
-    prev_page = f"{base_page}?page={page-1}&page_size={page_size}" if page > 1 else None
     
-    blogs = db.query(models.BlogPost).order_by(models.BlogPost.id).offset(offset).limit(limit).all()
+    next_page = None
+    if len(blogs) > limit:
+        
+        next_cursor = encode_cursor(blogs[:limit][-1].id)
+        next_page = f"{base_page}?cursor={next_cursor}&limit={limit}"
+    
     if not blogs:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="blogs not found")
     result = []
@@ -253,21 +321,20 @@ async def get_blog(request: Request, db: Session = Depends(get_db), current_user
                 is_liked = is_liked,
                 comments=blog.comments_count,
                 bookmarked=blog.id in bookmarked_post_ids,
-                base_page=base_page,
-                next_page=next_page,
-                prev_page=prev_page
+                
+                
             )
         )
     
     return {
             "pagination":{
                 "next_page": next_page,
-                "prev_page": prev_page,
+                
                 "base_page": base_page
             },
-            "data": result
+            "data": result[:limit]
             }
-
+    
 @app.get("/dashboard/userposts", response_model=list[schemas.UserBlogPostResponse])
 async def get_user_blogs(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     blogs = db.query(models.BlogPost).filter(models.BlogPost.author_id == current_user.id).all()

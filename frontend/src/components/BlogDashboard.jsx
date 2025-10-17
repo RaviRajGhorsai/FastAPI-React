@@ -61,7 +61,7 @@ export default function BlogDashboard() {
         );
         if(response.ok){
           const data = await response.json();
-          console.log(data);
+          
           setAllPosts(data.data);
           setPagination(data.pagination);
           const initialLiked = {};
@@ -336,7 +336,7 @@ if (response.ok)
           setPagination(data.pagination);
 
           const initialLiked = {};
-        data.forEach(post => {
+        data.data.forEach(post => {
           initialLiked[post.id] = post.is_liked;
         });
         setLikedPosts(initialLiked);
@@ -366,7 +366,7 @@ if (response.ok)
           setPagination(data.pagination);
 
           const initialLiked = {};
-        data.forEach(post => {
+        data.data.forEach(post => {
           initialLiked[post.id] = post.is_liked;
         });
         setLikedPosts(initialLiked);
@@ -396,7 +396,7 @@ if (response.ok)
           setAllPosts(data.data);
           
           const initialLiked = {};
-        data.forEach(post => {
+        data.data.forEach(post => {
           initialLiked[post.id] = post.is_liked;
         });
         setLikedPosts(initialLiked);
