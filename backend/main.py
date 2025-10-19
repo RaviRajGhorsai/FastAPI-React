@@ -14,13 +14,15 @@ from authlib.integrations.starlette_client import OAuth, OAuthError
 from datetime import timedelta
 from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordBearer
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from google.oauth2 import id_token
 from google.auth.transport import requests
 from config import Config
 import jwt
 import json, base64
 import httpx
-
+from limiter import limiter
 
 Base.metadata.create_all(bind=engine)
 
@@ -43,6 +45,9 @@ app.add_middleware(
 )
 
 app.add_middleware(SessionMiddleware, SECRET_KEY)
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 oauth = OAuth()
 oauth.register(
@@ -92,7 +97,8 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     return db_user
 
 @app.post("/signup", response_model=schemas.UserResponse)
-async def signup_users(user: schemas.UserCreate, db: Session = Depends(get_db)):
+@limiter.limit("1/second")
+async def signup_users(request: Request, user: schemas.UserCreate, db: Session = Depends(get_db)):
     existing = db.query(models.User).filter(models.User.email == user.email).first()
     if existing:
         raise HTTPException(status_code=status.HTTP_208_ALREADY_REPORTED, detail="Email already registered")
@@ -109,7 +115,8 @@ async def signup_users(user: schemas.UserCreate, db: Session = Depends(get_db)):
     return new_user
 
 @app.post("/login", response_model=schemas.UserResponse)
-async def login_users(user: schemas.UserLogin, db: Session = Depends(get_db)):
+@limiter.limit("1/second")
+async def login_users(request: Request, user: schemas.UserLogin, db: Session = Depends(get_db)):
     db_user = db.query(models.User).filter(models.User.email == user.email).first()
     if not db_user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Email not registered")
@@ -142,12 +149,14 @@ async def login_users(user: schemas.UserLogin, db: Session = Depends(get_db)):
         raise HTTPException(status_code=status.WS_1011_INTERNAL_ERROR, detail="Token generation failed") from e
 
 @app.get("/auth/login")
+@limiter.limit("1/second")
 async def google_login(request: Request):
     redirect_uri = request.url_for('auth_callback')
     google_auth_url = f"https://accounts.google.com/o/oauth2/auth?client_id={Config.GOOGLE_CLIENT_ID}&redirect_uri={redirect_uri}&response_type=code&scope=openid email profile"
     return RedirectResponse(url=google_auth_url)
 
 @app.get("/auth/google/callback")
+@limiter.limit("1/second")
 async def auth_callback(code:str, request: Request):
     token_request_uri = "https://oauth2.googleapis.com/token"
     data = {
@@ -280,6 +289,7 @@ def decode_cursor(cursor):
 
 # cursor pagination
 @app.get("/dashboard/feed", response_model=schemas.PaginatedBlogPosts)
+@limiter.limit("1/second")
 async def get_blog(request: Request, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user), cursor:Optional[str] = None, limit:int = Query(4, ge=1)):
     # cursor pagination
     cursor_id = 0
@@ -336,7 +346,8 @@ async def get_blog(request: Request, db: Session = Depends(get_db), current_user
             }
     
 @app.get("/dashboard/userposts", response_model=list[schemas.UserBlogPostResponse])
-async def get_user_blogs(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+@limiter.limit("1/second")
+async def get_user_blogs(request: Request, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     blogs = db.query(models.BlogPost).filter(models.BlogPost.author_id == current_user.id).all()
     result = []
     
@@ -358,7 +369,8 @@ async def get_user_blogs(db: Session = Depends(get_db), current_user: models.Use
     return result
     
 @app.post("/blog/create")
-async def create_blog(blog: schemas.BlogPostCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+@limiter.limit("1/second")
+async def create_blog(request: Request, blog: schemas.BlogPostCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     
     
     category = db.query(models.Category).filter(models.Category.title == blog.category).first()
@@ -384,7 +396,8 @@ async def create_blog(blog: schemas.BlogPostCreate, db: Session = Depends(get_db
     return {"message": "Blog post created successfully", "post_id": new_post.id}
         
 @app.delete("/blog/delete")
-async def delete_blog(id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+@limiter.limit("1/second")
+async def delete_blog(request: Request, id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     try:
         blog = db.query(models.BlogPost).filter(models.BlogPost.id == id, models.BlogPost.author_id == current_user.id).first()
     except Exception as e:
@@ -396,7 +409,8 @@ async def delete_blog(id: int, db: Session = Depends(get_db), current_user: mode
     return {"message": "Blog post deleted successfully"}
 
 @app.put("/blog/edit")
-async def edit_blog(id: int, blog: schemas.BlogPostUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+@limiter.limit("1/second")
+async def edit_blog(request: Request, id: int, blog: schemas.BlogPostUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     try:
         existing_blog = db.query(models.BlogPost).filter(models.BlogPost.id == id, models.BlogPost.author_id == current_user.id).first()
         if not existing_blog:
@@ -423,7 +437,8 @@ async def edit_blog(id: int, blog: schemas.BlogPostUpdate, db: Session = Depends
     return {"message": "Blog post updated successfully"}
     
 @app.post("/blog/like")
-async def like_post(id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+@limiter.limit("1/second")
+async def like_post(request: Request, id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     post = db.query(models.BlogPost).filter(models.BlogPost.id == id).first()
     if not post:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
@@ -442,7 +457,8 @@ async def like_post(id: int, db: Session = Depends(get_db), current_user: models
         return {"message": "Post liked"}
     
 @app.post("/blog/bookmark")
-async def bookmark_post(id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+@limiter.limit("1/second")
+async def bookmark_post(request: Request, id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     post = db.query(models.BlogPost).filter(models.BlogPost.id == id).first()
     if not post:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
